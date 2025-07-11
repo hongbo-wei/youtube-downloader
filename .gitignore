@@ -3,3 +3,6 @@
 
 # Donwloads
 downloads/
+
+# pycache
+__pycache__/

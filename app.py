@@ -26,4 +26,5 @@ def download_youtube_video(url):
         return ydl.prepare_filename(info)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Only run in debug mode when running directly
+    app.run(debug=True, host='127.0.0.1', port=5000)

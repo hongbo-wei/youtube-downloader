@@ -83,24 +83,6 @@
             display: none;
         }
         
-        .video-info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .video-title {
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        
-        .status-message {
-            color: #666;
-            font-size: 14px;
-        }
-        
         .progress-bar-container {
             background: #e1e1e1;
             border-radius: 10px;
@@ -112,7 +94,7 @@
         
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #45a049);
+            background: #ff6b6b;
             width: 0%;
             transition: width 0.3s ease;
         }
@@ -127,51 +109,6 @@
             font-weight: bold;
         }
         
-        .download-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin: 15px 0;
-            font-size: 14px;
-        }
-        
-        .stat {
-            text-align: center;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-        
-        .stat-label {
-            color: #666;
-            font-size: 12px;
-        }
-        
-        .stat-value {
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .download-btn {
-            background: #4CAF50;
-            margin-top: 15px;
-            display: none;
-        }
-        
-        .download-btn:hover {
-            background: #45a049;
-        }
-        
-        .success-message {
-            background: #e8f5e8;
-            color: #2e7d32;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 15px;
-            display: none;
-            text-align: center;
-        }
-        
         .error {
             background: #ffebee;
             color: #c62828;
@@ -179,16 +116,6 @@
             border-radius: 10px;
             margin-top: 15px;
             display: none;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .loading {
-            animation: pulse 2s infinite;
         }
     </style>
 </head>
@@ -201,51 +128,16 @@
                 <input type="text" id="urlInput" placeholder="Enter YouTube URL" required>
             </div>
             <button type="submit" class="btn" id="downloadBtn">Start Download</button>
-            
-            <div style="margin-top: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; font-size: 14px;">
-                <strong>💡 Tip:</strong> If you get "Video unavailable" on Render, try public videos like:
-                <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                    • Music videos from major artists<br>
-                    • Official trailers or public broadcasts<br>
-                    • Creative Commons content
-                </div>
-            </div>
         </form>
         
         <div class="progress-container" id="progressContainer">
-            <div class="video-info" id="videoInfo">
-                <div class="video-title" id="videoTitle">Preparing download...</div>
-                <div class="status-message" id="statusMessage">Extracting video information...</div>
-            </div>
-            
             <div class="progress-bar-container">
                 <div class="progress-bar" id="progressBar"></div>
                 <div class="progress-text" id="progressText">0%</div>
             </div>
-            
-            <div class="download-stats" id="downloadStats">
-                <div class="stat">
-                    <div class="stat-label">Speed</div>
-                    <div class="stat-value" id="speedStat">-</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Size</div>
-                    <div class="stat-value" id="sizeStat">-</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">ETA</div>
-                    <div class="stat-value" id="etaStat">-</div>
-                </div>
-            </div>
-            
-            <button class="btn download-btn" id="finalDownloadBtn">Download File</button>
         </div>
         
         <div class="error" id="errorMessage"></div>
-        
-        <div class="success-message" id="successMessage">
-            ✅ Download completed successfully!
-        </div>
     </div>
 
     <script>
@@ -253,16 +145,9 @@
         const urlInput = document.getElementById('urlInput');
         const downloadBtn = document.getElementById('downloadBtn');
         const progressContainer = document.getElementById('progressContainer');
-        const videoTitle = document.getElementById('videoTitle');
-        const statusMessage = document.getElementById('statusMessage');
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
-        const speedStat = document.getElementById('speedStat');
-        const sizeStat = document.getElementById('sizeStat');
-        const etaStat = document.getElementById('etaStat');
-        const finalDownloadBtn = document.getElementById('finalDownloadBtn');
         const errorMessage = document.getElementById('errorMessage');
-        const successMessage = document.getElementById('successMessage');
         
         let currentDownloadId = null;
         let progressInterval = null;
@@ -279,11 +164,10 @@
             // Reset UI
             progressContainer.style.display = 'block';
             errorMessage.style.display = 'none';
-            successMessage.style.display = 'none';
-            finalDownloadBtn.style.display = 'none';
             downloadBtn.disabled = true;
             downloadBtn.textContent = 'Downloading...';
-            progressContainer.classList.add('loading');
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
             
             // Send download request
             fetch('/download', {
@@ -326,55 +210,26 @@
         
         function updateProgress(data) {
             switch(data.status) {
-                case 'starting':
-                case 'extracting':
-                    videoTitle.textContent = 'Preparing download...';
-                    statusMessage.textContent = data.message || 'Extracting video information...';
-                    break;
-                    
-                case 'info_extracted':
-                    videoTitle.textContent = data.video_title || 'Unknown Video';
-                    statusMessage.textContent = data.message || 'Starting download...';
-                    progressContainer.classList.remove('loading');
-                    break;
-                    
                 case 'downloading':
-                    statusMessage.textContent = 'Downloading...';
                     const percent = data.percent_num || 0;
                     progressBar.style.width = percent + '%';
                     progressText.textContent = data.percent || '0%';
                     
-                    // Update stats
-                    if (data.speed) {
-                        speedStat.textContent = formatBytes(data.speed) + '/s';
-                    }
-                    
-                    if (data.total_bytes) {
-                        sizeStat.textContent = formatBytes(data.total_bytes);
-                    }
-                    
-                    if (data.eta) {
-                        etaStat.textContent = formatTime(data.eta);
-                    }
-                    break;
-                    
-                case 'finished':
-                    progressBar.style.width = '100%';
-                    progressText.textContent = '100%';
+                    // Dynamic color: red to green based on percentage
+                    const greenIntensity = Math.min(255, Math.floor(percent * 2.55));
+                    progressBar.style.background = `rgb(${255-greenIntensity}, ${greenIntensity}, 50)`;
                     break;
                     
                 case 'completed':
-                    videoTitle.textContent = data.video_title || 'Download Complete';
-                    statusMessage.textContent = data.message || 'Download completed successfully!';
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
+                    progressBar.style.background = '#4CAF50';
                     
-                    // Auto-download if available
-                    if (data.auto_download && data.download_url) {
+                    // Auto-download
+                    if (data.download_url) {
                         setTimeout(() => {
                             window.location.href = data.download_url;
-                            successMessage.style.display = 'block';
-                        }, 1000); // Small delay to show completion
+                        }, 500);
                     }
                     
                     clearInterval(progressInterval);
@@ -382,39 +237,22 @@
                     break;
                     
                 case 'error':
-                    showError(data.message || 'An error occurred during download');
+                    showError(data.message || 'Download failed');
                     clearInterval(progressInterval);
                     resetUI();
                     break;
             }
         }
         
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
-        
-        function formatTime(seconds) {
-            if (!seconds || seconds === 0) return '-';
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-        
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
-            successMessage.style.display = 'none';
             progressContainer.style.display = 'none';
         }
         
         function resetUI() {
             downloadBtn.disabled = false;
             downloadBtn.textContent = 'Start Download';
-            progressContainer.classList.remove('loading');
         }
     </script>
 </body>

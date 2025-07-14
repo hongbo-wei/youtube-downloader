@@ -4,131 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Downloader</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-        }
-        
-        .container {
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            max-width: 600px;
-            width: 100%;
-        }
-        
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-            font-size: 2.5em;
-            font-weight: 300;
-        }
-        
-        .input-group {
-            margin-bottom: 20px;
-        }
-        
-        input[type="text"] {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e1e1;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .btn {
-            width: 100%;
-            padding: 15px;
-            border: none;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 10px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .progress-container {
-            margin-top: 30px;
-            display: none;
-        }
-        
-        .progress-bar-container {
-            background: #e1e1e1;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 15px 0;
-            height: 20px;
-            position: relative;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background: #ff6b6b;
-            width: 0%;
-            transition: width 0.3s ease;
-        }
-        
-        .progress-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #333;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        
-        .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 15px;
-            display: none;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="container">
         <h1>📹 YouTube Downloader</h1>
         
+        <!-- Diagnostic info -->
+        <div id="diagnostic-info" class="diagnostic-info">
+            <strong>🔍 Server Status:</strong> <span id="server-status">Checking...</span>
+        </div>
+        
         <form id="downloadForm">
             <div class="input-group">
                 <input type="text" id="urlInput" placeholder="Enter YouTube URL" required>
             </div>
-            <button type="submit" class="btn" id="downloadBtn">Start Download</button>
+            <div class="button-group">
+                <button type="submit" class="btn" id="downloadBtn">Start Download</button>
+                <button type="button" class="btn secondary" id="diagnosticBtn">🔍 Check Status</button>
+            </div>
         </form>
+        
+        <!-- Helpful note for users -->
+        <div class="info-box">
+            💡 <strong>Having issues?</strong> For the most reliable downloads, you can clone and run this app locally: 
+            <a href="https://github.com/hongbo-wei/youtube-downloader" target="_blank">
+                <strong>github.com/hongbo-wei/youtube-downloader</strong>
+            </a>
+        </div>
         
         <div class="progress-container" id="progressContainer">
             <div class="progress-bar-container">
@@ -140,120 +43,6 @@
         <div class="error" id="errorMessage"></div>
     </div>
 
-    <script>
-        const form = document.getElementById('downloadForm');
-        const urlInput = document.getElementById('urlInput');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const progressContainer = document.getElementById('progressContainer');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const errorMessage = document.getElementById('errorMessage');
-        
-        let currentDownloadId = null;
-        let progressInterval = null;
-        
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            startDownload();
-        });
-        
-        function startDownload() {
-            const url = urlInput.value.trim();
-            if (!url) return;
-            
-            // Reset UI
-            progressContainer.style.display = 'block';
-            errorMessage.style.display = 'none';
-            downloadBtn.disabled = true;
-            downloadBtn.textContent = 'Downloading...';
-            progressBar.style.width = '0%';
-            progressText.textContent = '0%';
-            
-            // Send download request
-            fetch('/download', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `url=${encodeURIComponent(url)}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                currentDownloadId = data.download_id;
-                // Start polling for progress
-                startProgressPolling();
-            })
-            .catch(error => {
-                showError('Failed to start download: ' + error.message);
-                resetUI();
-            });
-        }
-        
-        function startProgressPolling() {
-            if (progressInterval) {
-                clearInterval(progressInterval);
-            }
-            
-            progressInterval = setInterval(() => {
-                if (!currentDownloadId) return;
-                
-                fetch(`/progress/${currentDownloadId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        updateProgress(data);
-                    })
-                    .catch(error => {
-                        console.error('Progress fetch error:', error);
-                    });
-            }, 1000); // Poll every second
-        }
-        
-        function updateProgress(data) {
-            switch(data.status) {
-                case 'downloading':
-                    const percent = data.percent_num || 0;
-                    progressBar.style.width = percent + '%';
-                    progressText.textContent = data.percent || '0%';
-                    
-                    // Dynamic color: red to green based on percentage
-                    const greenIntensity = Math.min(255, Math.floor(percent * 2.55));
-                    progressBar.style.background = `rgb(${255-greenIntensity}, ${greenIntensity}, 50)`;
-                    break;
-                    
-                case 'completed':
-                    progressBar.style.width = '100%';
-                    progressText.textContent = '100%';
-                    progressBar.style.background = '#4CAF50';
-                    
-                    // Auto-download
-                    if (data.download_url) {
-                        setTimeout(() => {
-                            window.location.href = data.download_url;
-                        }, 500);
-                    }
-                    
-                    clearInterval(progressInterval);
-                    resetUI();
-                    break;
-                    
-                case 'error':
-                    showError(data.message || 'Download failed');
-                    clearInterval(progressInterval);
-                    resetUI();
-                    break;
-            }
-        }
-        
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-            progressContainer.style.display = 'none';
-        }
-        
-        function resetUI() {
-            downloadBtn.disabled = false;
-            downloadBtn.textContent = 'Start Download';
-        }
-    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

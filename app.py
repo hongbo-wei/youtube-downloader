@@ -4,6 +4,8 @@ import os
 import threading
 import uuid
 import tempfile
+import socket
+import requests
 
 app = Flask(__name__)
 
@@ -151,8 +153,8 @@ def download_youtube_video(url, download_id):
         # 尝试多种配置以绕过云端限制
         config_attempts = [
             {
-                # 配置1: 标准配置 + 地理绕过
-                'format': 'best[ext=mp4]/best',
+                # 配置1: 最新浏览器模拟 + OAuth策略
+                'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
                 'merge_output_format': 'mp4',
                 'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
                 'noplaylist': True,
@@ -160,20 +162,60 @@ def download_youtube_video(url, download_id):
                 'rm_cachedir': True,
                 'no_cache_dir': True,
                 'overwrites': True,
-                'postprocessors': [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}],
-                'cookiefile': None,
-                'no_check_certificate': True,
+                'age_limit': None,
                 'geo_bypass': True,
                 'geo_bypass_country': 'US',
+                'socket_timeout': 30,
+                'retries': 3,
+                'fragment_retries': 3,
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-us,en;q=0.5',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"Windows"',
+                    'Sec-Fetch-Dest': 'document',
                     'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Cache-Control': 'max-age=0',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'skip': ['hls', 'dash'],
+                        'player_skip': ['js'],
+                        'player_client': ['android', 'web'],
+                    }
                 },
             },
             {
-                # 配置2: 更简单的格式选择
+                # 配置2: Android客户端模拟
+                'format': 'best[height<=480][ext=mp4]/worst[ext=mp4]/worst',
+                'merge_output_format': 'mp4',
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'progress_hooks': [progress_hook],
+                'rm_cachedir': True,
+                'no_cache_dir': True,
+                'overwrites': True,
+                'geo_bypass': True,
+                'socket_timeout': 20,
+                'http_headers': {
+                    'User-Agent': 'com.google.android.youtube/19.29.37 (Linux; U; Android 11; SM-G973F Build/RP1A.200720.012) gzip',
+                    'X-YouTube-Client-Name': '3',
+                    'X-YouTube-Client-Version': '19.29.37',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'skip': ['webpage'],
+                    }
+                },
+            },
+            {
+                # 配置3: iOS客户端模拟
                 'format': 'worst[ext=mp4]/worst',
                 'merge_output_format': 'mp4',
                 'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
@@ -184,7 +226,15 @@ def download_youtube_video(url, download_id):
                 'overwrites': True,
                 'geo_bypass': True,
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1',
+                    'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)',
+                    'X-YouTube-Client-Name': '5',
+                    'X-YouTube-Client-Version': '19.29.1',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios'],
+                        'skip': ['webpage'],
+                    }
                 },
             }
         ]
@@ -194,13 +244,17 @@ def download_youtube_video(url, download_id):
             try:
                 downloads_progress[download_id] = {
                     'status': 'starting',
-                    'message': f'Trying configuration {i+1}...'
+                    'message': f'Trying method {i+1}/3: {"Browser" if i==0 else "Android" if i==1 else "iOS"} mode...'
                 }
                 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     # Extract video info first to get the title
                     info = ydl.extract_info(url, download=False)
                     video_title = info.get('title', 'Unknown Video')
+                    
+                    # Check if video is available
+                    if not info.get('formats') and not info.get('url'):
+                        raise Exception("Video has no available formats")
                     
                     # Update progress hook with video title
                     progress_hook.video_title = video_title
@@ -209,12 +263,16 @@ def download_youtube_video(url, download_id):
                     downloads_progress[download_id] = {
                         'status': 'info_extracted',
                         'video_title': video_title,
-                        'message': f'Starting download: {video_title}'
+                        'message': f'Found video: {video_title[:50]}{"..." if len(video_title) > 50 else ""}'
                     }
                     
                     # Now download to temporary directory
                     info = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info)
+                    
+                    # Verify file was created and has content
+                    if not os.path.exists(filename) or os.path.getsize(filename) < 1024:
+                        raise Exception("Downloaded file is empty or corrupted")
                     
                     # Store download info for streaming
                     downloads_files[download_id] = {
@@ -230,17 +288,30 @@ def download_youtube_video(url, download_id):
                         'download_url': f'/stream/{download_id}',
                         'auto_download': True
                     }
+                    print(f"✅ Success with method {i+1}: {video_title}")
                     return  # 成功，退出函数
                     
             except Exception as e:
-                last_error = str(e)
-                print(f"Configuration {i+1} failed: {last_error}")
+                error_msg = str(e)
+                print(f"❌ Method {i+1} failed: {error_msg}")
+                
+                # 检查是否是特定的YouTube错误
+                if any(keyword in error_msg.lower() for keyword in [
+                    'video unavailable', 'private video', 'removed', 'deleted',
+                    'sign in to confirm', 'not available', 'blocked'
+                ]):
+                    last_error = f"YouTube Error: {error_msg}"
+                    if i == len(config_attempts) - 1:  # 最后一次尝试
+                        break
+                else:
+                    last_error = error_msg
+                
                 continue
         
         # 所有配置都失败了
         downloads_progress[download_id] = {
             'status': 'error',
-            'message': f'All download attempts failed. Last error: {last_error}'
+            'message': f'❌ All download methods failed. YouTube may be blocking this server IP. Error: {last_error}. 💡 For reliable downloads, clone and run locally: https://github.com/hongbo-wei/youtube-downloader'
         }
             
     except Exception as e:
@@ -249,6 +320,39 @@ def download_youtube_video(url, download_id):
             'message': f'Error: {str(e)}'
         }
         print(f"Download {download_id}: Error - {str(e)}")
+
+@app.route('/health')
+def health_check():
+    """诊断端点，检查服务器状态"""
+    try:
+        # 检查服务器 IP
+        ip_response = requests.get('https://api.ipify.org', timeout=5)
+        server_ip = ip_response.text.strip()
+        
+        # 检查是否能访问 YouTube
+        youtube_accessible = True
+        youtube_error = None
+        try:
+            response = requests.get('https://www.youtube.com', timeout=10)
+            if response.status_code != 200:
+                youtube_accessible = False
+                youtube_error = f"HTTP {response.status_code}"
+        except Exception as e:
+            youtube_accessible = False
+            youtube_error = str(e)
+        
+        return jsonify({
+            'status': 'healthy',
+            'server_ip': server_ip,
+            'youtube_accessible': youtube_accessible,
+            'youtube_error': youtube_error,
+            'environment': 'cloud' if server_ip and not server_ip.startswith(('192.168.', '10.', '172.')) else 'local'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     # Only run in debug mode when running directly

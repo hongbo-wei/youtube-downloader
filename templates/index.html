@@ -201,6 +201,15 @@
                 <input type="text" id="urlInput" placeholder="Enter YouTube URL" required>
             </div>
             <button type="submit" class="btn" id="downloadBtn">Start Download</button>
+            
+            <div style="margin-top: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; font-size: 14px;">
+                <strong>💡 Tip:</strong> If you get "Video unavailable" on Render, try public videos like:
+                <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                    • Music videos from major artists<br>
+                    • Official trailers or public broadcasts<br>
+                    • Creative Commons content
+                </div>
+            </div>
         </form>
         
         <div class="progress-container" id="progressContainer">
@@ -319,8 +328,12 @@
             switch(data.status) {
                 case 'starting':
                 case 'extracting':
+                case 'retrying':
                     videoTitle.textContent = 'Preparing download...';
                     statusMessage.textContent = data.message || 'Extracting video information...';
+                    if (data.status === 'retrying') {
+                        progressContainer.classList.add('loading');
+                    }
                     break;
                     
                 case 'info_extracted':

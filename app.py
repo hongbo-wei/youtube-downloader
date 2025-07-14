@@ -118,62 +118,118 @@ def stream_file(download_id):
     return "File not found", 404
 
 def download_youtube_video(url, download_id):
-    try:
-        # Update status
-        downloads_progress[download_id] = {
-            'status': 'extracting',
-            'message': 'Extracting video information...'
-        }
-        
-        # Use temporary directory
-        temp_dir = tempfile.mkdtemp()
-        
-        # Create progress hook
-        progress_hook = ProgressHook(download_id)
-        
-        ydl_opts = {
-            'format': 'best[height<=720]/best',  # Limit quality for faster download
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'noplaylist': True,
-            'progress_hooks': [progress_hook],
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract info first
-            info = ydl.extract_info(url, download=False)
-            video_title = info.get('title', 'Unknown Video')
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            # Update status
+            if retry_count > 0:
+                downloads_progress[download_id] = {
+                    'status': 'retrying',
+                    'message': f'Retrying download (attempt {retry_count + 1}/{max_retries})...'
+                }
+                time.sleep(2)  # Wait before retry
+            else:
+                downloads_progress[download_id] = {
+                    'status': 'extracting',
+                    'message': 'Extracting video information...'
+                }
             
-            downloads_progress[download_id] = {
-                'status': 'info_extracted',
-                'video_title': video_title,
-                'message': f'Starting download: {video_title}'
+            # Use temporary directory
+            temp_dir = tempfile.mkdtemp()
+            
+            # Create progress hook
+            progress_hook = ProgressHook(download_id)
+            
+            ydl_opts = {
+                'format': 'best[height<=720]/best',  # Limit quality for faster download
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'progress_hooks': [progress_hook],
+                'extractor_retries': 3,
+                'fragment_retries': 3,
+                'retry_sleep_functions': {'http': lambda n: 2 ** n},
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Sec-Fetch-Mode': 'navigate',
+                },
+                'sleep_interval_requests': 1,
+                'sleep_interval_subtitles': 1,
             }
             
-            # Now download
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Extract info first
+                info = ydl.extract_info(url, download=False)
+                video_title = info.get('title', 'Unknown Video')
+                
+                downloads_progress[download_id] = {
+                    'status': 'info_extracted',
+                    'video_title': video_title,
+                    'message': f'Starting download: {video_title}'
+                }
+                
+                # Now download
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                
+                # Store download info
+                downloads_files[download_id] = {
+                    'filename': filename,
+                    'video_title': video_title,
+                    'status': 'completed'
+                }
+                
+                downloads_progress[download_id] = {
+                    'status': 'completed',
+                    'filename': os.path.basename(filename),
+                    'video_title': video_title,
+                    'message': 'Download completed! Starting automatic download...',
+                    'download_url': f'/stream/{download_id}',
+                    'auto_download': True
+                }
+                return  # Success, exit retry loop
+                
+        except Exception as e:
+            error_msg = str(e)
+            retry_count += 1
             
-            # Store download info
-            downloads_files[download_id] = {
-                'filename': filename,
-                'video_title': video_title,
-                'status': 'completed'
-            }
-            
-            downloads_progress[download_id] = {
-                'status': 'completed',
-                'filename': os.path.basename(filename),
-                'video_title': video_title,
-                'message': 'Download completed! Starting automatic download...',
-                'download_url': f'/stream/{download_id}',
-                'auto_download': True
-            }
-            
-    except Exception as e:
-        downloads_progress[download_id] = {
-            'status': 'error',
-            'message': f'Error: {str(e)}'
-        }
+            # Check if it's a specific YouTube error
+            if 'Video unavailable' in error_msg or 'Private video' in error_msg:
+                if retry_count < max_retries:
+                    downloads_progress[download_id] = {
+                        'status': 'retrying',
+                        'message': f'Video access issue, retrying with different settings (attempt {retry_count}/{max_retries})...'
+                    }
+                    # Try different format on retry
+                    continue
+                else:
+                    downloads_progress[download_id] = {
+                        'status': 'error',
+                        'message': 'Video unavailable: This might be a private video, geo-blocked content, or temporarily unavailable. Please try a different video.'
+                    }
+                    return
+            elif 'Sign in' in error_msg:
+                downloads_progress[download_id] = {
+                    'status': 'error',
+                    'message': 'This video requires authentication. Please try a public video instead.'
+                }
+                return
+            else:
+                if retry_count < max_retries:
+                    downloads_progress[download_id] = {
+                        'status': 'retrying',
+                        'message': f'Connection error, retrying (attempt {retry_count}/{max_retries})...'
+                    }
+                    continue
+                else:
+                    downloads_progress[download_id] = {
+                        'status': 'error',
+                        'message': f'Download failed after {max_retries} attempts: {error_msg}'
+                    }
+                    return
 
 if __name__ == '__main__':
     # Only run in debug mode when running directly

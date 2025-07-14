@@ -5,43 +5,384 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube Downloader</title>
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background-color: #f4f4f4;
-        }
-        .container {
-            text-align: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 20px;
-            border-radius: 8px;
-            background-color: white;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
         input[type="text"] {
-            width: 80%;
-            padding: 8px;
-            margin-bottom: 10px;
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
         }
-        button {
-            padding: 10px 20px;
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
             border: none;
-            background-color: #ff0000;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-radius: 5px;
+            border-radius: 10px;
+            font-size: 16px;
             cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress-container {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .video-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .video-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .status-message {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .progress-bar-container {
+            background: #e1e1e1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+            height: 20px;
+            position: relative;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .download-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .download-btn {
+            background: #4CAF50;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .download-btn:hover {
+            background: #45a049;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .loading {
+            animation: pulse 2s infinite;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>YouTube Video Downloader</h1>
-        <form action="/download" method="post">
-            <input type="text" name="url" placeholder="Enter YouTube URL" required>
-            <button type="submit">Download</button>
+        <h1>📹 YouTube Downloader</h1>
+        
+        <form id="downloadForm">
+            <div class="input-group">
+                <input type="text" id="urlInput" placeholder="Enter YouTube URL" required>
+            </div>
+            <button type="submit" class="btn" id="downloadBtn">Start Download</button>
         </form>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="video-info" id="videoInfo">
+                <div class="video-title" id="videoTitle">Preparing download...</div>
+                <div class="status-message" id="statusMessage">Extracting video information...</div>
+            </div>
+            
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText">0%</div>
+            </div>
+            
+            <div class="download-stats" id="downloadStats">
+                <div class="stat">
+                    <div class="stat-label">Speed</div>
+                    <div class="stat-value" id="speedStat">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Size</div>
+                    <div class="stat-value" id="sizeStat">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">ETA</div>
+                    <div class="stat-value" id="etaStat">-</div>
+                </div>
+            </div>
+            
+            <button class="btn download-btn" id="finalDownloadBtn">Download File</button>
+        </div>
+        
+        <div class="error" id="errorMessage"></div>
     </div>
+
+    <script>
+        const form = document.getElementById('downloadForm');
+        const urlInput = document.getElementById('urlInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const videoTitle = document.getElementById('videoTitle');
+        const statusMessage = document.getElementById('statusMessage');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const speedStat = document.getElementById('speedStat');
+        const sizeStat = document.getElementById('sizeStat');
+        const etaStat = document.getElementById('etaStat');
+        const finalDownloadBtn = document.getElementById('finalDownloadBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        let currentDownloadId = null;
+        let progressInterval = null;
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            startDownload();
+        });
+        
+        function startDownload() {
+            const url = urlInput.value.trim();
+            if (!url) return;
+            
+            // Reset UI
+            progressContainer.style.display = 'block';
+            errorMessage.style.display = 'none';
+            finalDownloadBtn.style.display = 'none';
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Downloading...';
+            progressContainer.classList.add('loading');
+            
+            // Send download request
+            fetch('/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `url=${encodeURIComponent(url)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                currentDownloadId = data.download_id;
+                // Start polling for progress
+                startProgressPolling();
+            })
+            .catch(error => {
+                showError('Failed to start download: ' + error.message);
+                resetUI();
+            });
+        }
+        
+        function startProgressPolling() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+            
+            progressInterval = setInterval(() => {
+                if (!currentDownloadId) return;
+                
+                fetch(`/progress/${currentDownloadId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        updateProgress(data);
+                    })
+                    .catch(error => {
+                        console.error('Progress fetch error:', error);
+                    });
+            }, 1000); // Poll every second
+        }
+        
+        function updateProgress(data) {
+            switch(data.status) {
+                case 'starting':
+                case 'extracting':
+                    videoTitle.textContent = 'Preparing download...';
+                    statusMessage.textContent = data.message || 'Extracting video information...';
+                    break;
+                    
+                case 'info_extracted':
+                    videoTitle.textContent = data.video_title || 'Unknown Video';
+                    statusMessage.textContent = data.message || 'Starting download...';
+                    progressContainer.classList.remove('loading');
+                    break;
+                    
+                case 'downloading':
+                    statusMessage.textContent = 'Downloading...';
+                    const percent = data.percent_num || 0;
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = data.percent || '0%';
+                    
+                    // Update stats
+                    if (data.speed) {
+                        speedStat.textContent = formatBytes(data.speed) + '/s';
+                    }
+                    
+                    if (data.total_bytes) {
+                        sizeStat.textContent = formatBytes(data.total_bytes);
+                    }
+                    
+                    if (data.eta) {
+                        etaStat.textContent = formatTime(data.eta);
+                    }
+                    break;
+                    
+                case 'finished':
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    break;
+                    
+                case 'completed':
+                    videoTitle.textContent = data.video_title || 'Download Complete';
+                    statusMessage.textContent = data.message || 'Download completed successfully!';
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    finalDownloadBtn.style.display = 'block';
+                    finalDownloadBtn.onclick = () => window.location.href = data.download_url;
+                    clearInterval(progressInterval);
+                    resetUI();
+                    break;
+                    
+                case 'error':
+                    showError(data.message || 'An error occurred during download');
+                    clearInterval(progressInterval);
+                    resetUI();
+                    break;
+            }
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+        
+        function formatTime(seconds) {
+            if (!seconds || seconds === 0) return '-';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            progressContainer.style.display = 'none';
+        }
+        
+        function resetUI() {
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = 'Start Download';
+            progressContainer.classList.remove('loading');
+        }
+    </script>
 </body>
 </html>

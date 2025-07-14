@@ -328,12 +328,8 @@
             switch(data.status) {
                 case 'starting':
                 case 'extracting':
-                case 'retrying':
                     videoTitle.textContent = 'Preparing download...';
                     statusMessage.textContent = data.message || 'Extracting video information...';
-                    if (data.status === 'retrying') {
-                        progressContainer.classList.add('loading');
-                    }
                     break;
                     
                 case 'info_extracted':

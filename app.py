@@ -148,57 +148,99 @@ def download_youtube_video(url, download_id):
         # Create progress hook
         progress_hook = ProgressHook(download_id)
         
-        # Configuration for server-based downloading with streaming
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',  # Prefer mp4 format for better compatibility
-            'merge_output_format': 'mp4',
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'noplaylist': True,
-            'progress_hooks': [progress_hook],
-            # Clear cache to allow re-downloading deleted files
-            'rm_cachedir': True,
-            'no_cache_dir': True,
-            # Force overwrite if file exists
-            'overwrites': True,
-            # Ensure QuickTime compatibility
-            'postprocessors': [{
-                'key': 'FFmpegVideoConvertor',
-                'preferedformat': 'mp4',
-            }],
-        }
+        # 尝试多种配置以绕过云端限制
+        config_attempts = [
+            {
+                # 配置1: 标准配置 + 地理绕过
+                'format': 'best[ext=mp4]/best',
+                'merge_output_format': 'mp4',
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'progress_hooks': [progress_hook],
+                'rm_cachedir': True,
+                'no_cache_dir': True,
+                'overwrites': True,
+                'postprocessors': [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}],
+                'cookiefile': None,
+                'no_check_certificate': True,
+                'geo_bypass': True,
+                'geo_bypass_country': 'US',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Sec-Fetch-Mode': 'navigate',
+                },
+            },
+            {
+                # 配置2: 更简单的格式选择
+                'format': 'worst[ext=mp4]/worst',
+                'merge_output_format': 'mp4',
+                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'progress_hooks': [progress_hook],
+                'rm_cachedir': True,
+                'no_cache_dir': True,
+                'overwrites': True,
+                'geo_bypass': True,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1',
+                },
+            }
+        ]
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract video info first to get the title
-            info = ydl.extract_info(url, download=False)
-            video_title = info.get('title', 'Unknown Video')
-            
-            # Update progress hook with video title
-            progress_hook.video_title = video_title
-            
-            # Update progress with video title
-            downloads_progress[download_id] = {
-                'status': 'info_extracted',
-                'video_title': video_title,
-                'message': f'Starting download: {video_title}'
-            }
-            
-            # Now download to temporary directory
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            
-            # Store download info for streaming
-            downloads_files[download_id] = {
-                'filename': filename,
-                'video_title': video_title,
-                'status': 'completed'
-            }
-            
+        last_error = None
+        for i, ydl_opts in enumerate(config_attempts):
+            try:
+                downloads_progress[download_id] = {
+                    'status': 'starting',
+                    'message': f'Trying configuration {i+1}...'
+                }
+                
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Extract video info first to get the title
+                    info = ydl.extract_info(url, download=False)
+                    video_title = info.get('title', 'Unknown Video')
+                    
+                    # Update progress hook with video title
+                    progress_hook.video_title = video_title
+                    
+                    # Update progress with video title
+                    downloads_progress[download_id] = {
+                        'status': 'info_extracted',
+                        'video_title': video_title,
+                        'message': f'Starting download: {video_title}'
+                    }
+                    
+                    # Now download to temporary directory
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
+                    
+                    # Store download info for streaming
+                    downloads_files[download_id] = {
+                        'filename': filename,
+                        'video_title': video_title,
+                        'status': 'completed'
+                    }
+                    
+                    downloads_progress[download_id] = {
+                        'status': 'completed',
+                        'video_title': video_title,
+                        'message': 'Download completed! Starting automatic download...',
+                        'download_url': f'/stream/{download_id}',
+                        'auto_download': True
+                    }
+                    return  # 成功，退出函数
+                    
+            except Exception as e:
+                last_error = str(e)
+                print(f"Configuration {i+1} failed: {last_error}")
+                continue
+        
+        # 所有配置都失败了
         downloads_progress[download_id] = {
-            'status': 'completed',
-            'video_title': video_title,
-            'message': 'Download completed! Starting automatic download...',
-            'download_url': f'/stream/{download_id}',
-            'auto_download': True
+            'status': 'error',
+            'message': f'All download attempts failed. Last error: {last_error}'
         }
             
     except Exception as e:

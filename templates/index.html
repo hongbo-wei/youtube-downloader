@@ -162,6 +162,16 @@
             background: #45a049;
         }
         
+        .success-message {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+            text-align: center;
+        }
+        
         .error {
             background: #ffebee;
             color: #c62828;
@@ -223,6 +233,10 @@
         </div>
         
         <div class="error" id="errorMessage"></div>
+        
+        <div class="success-message" id="successMessage">
+            ✅ Download completed successfully!
+        </div>
     </div>
 
     <script>
@@ -239,6 +253,7 @@
         const etaStat = document.getElementById('etaStat');
         const finalDownloadBtn = document.getElementById('finalDownloadBtn');
         const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
         
         let currentDownloadId = null;
         let progressInterval = null;
@@ -255,6 +270,7 @@
             // Reset UI
             progressContainer.style.display = 'block';
             errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
             finalDownloadBtn.style.display = 'none';
             downloadBtn.disabled = true;
             downloadBtn.textContent = 'Downloading...';
@@ -343,8 +359,15 @@
                     statusMessage.textContent = data.message || 'Download completed successfully!';
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
-                    finalDownloadBtn.style.display = 'block';
-                    finalDownloadBtn.onclick = () => window.location.href = data.download_url;
+                    
+                    // Auto-download if available
+                    if (data.auto_download && data.download_url) {
+                        setTimeout(() => {
+                            window.location.href = data.download_url;
+                            successMessage.style.display = 'block';
+                        }, 1000); // Small delay to show completion
+                    }
+                    
                     clearInterval(progressInterval);
                     resetUI();
                     break;
@@ -375,6 +398,7 @@
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
             progressContainer.style.display = 'none';
         }
         

@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, send_file, jsonify, session
+from flask import Flask, render_template, request, send_file, jsonify, Response
 import yt_dlp
 import os
 import threading
 import uuid
 import json
 import time
+import io
+import tempfile
 
 app = Flask(__name__)
 
@@ -76,6 +78,45 @@ def get_progress(download_id):
     progress = downloads_progress.get(download_id, {'status': 'not_found'})
     return jsonify(progress)
 
+@app.route('/stream/<download_id>')
+def stream_file(download_id):
+    """Stream the downloaded file directly to user"""
+    if download_id in downloads_files:
+        file_info = downloads_files[download_id]
+        filename = file_info['filename']
+        video_title = file_info.get('video_title', 'video')
+        
+        if os.path.exists(filename):
+            # Get file extension
+            _, ext = os.path.splitext(filename)
+            # Create a safe filename for download
+            clean_title = video_title.replace('/', '_').replace('\\', '_')
+            safe_filename = f"{clean_title}{ext}"
+            
+            def generate():
+                with open(filename, 'rb') as f:
+                    while True:
+                        data = f.read(4096)  # Read in chunks
+                        if not data:
+                            break
+                        yield data
+                # Clean up file after streaming
+                try:
+                    os.remove(filename)
+                except:
+                    pass
+            
+            return Response(
+                generate(),
+                mimetype='application/octet-stream',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{safe_filename}"',
+                    'Content-Type': 'application/octet-stream'
+                }
+            )
+    
+    return "File not found", 404
+
 def download_youtube_video(url, download_id):
     try:
         # Update status
@@ -84,14 +125,15 @@ def download_youtube_video(url, download_id):
             'message': 'Extracting video information...'
         }
         
-        os.makedirs('downloads', exist_ok=True)
+        # Use temporary directory
+        temp_dir = tempfile.mkdtemp()
         
         # Create progress hook
         progress_hook = ProgressHook(download_id)
         
         ydl_opts = {
-            'format': 'best',
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'format': 'best[height<=720]/best',  # Limit quality for faster download
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'progress_hooks': [progress_hook],
         }
@@ -122,8 +164,9 @@ def download_youtube_video(url, download_id):
                 'status': 'completed',
                 'filename': os.path.basename(filename),
                 'video_title': video_title,
-                'message': 'Download completed successfully!',
-                'download_url': f'/get_file/{download_id}'
+                'message': 'Download completed! Starting automatic download...',
+                'download_url': f'/stream/{download_id}',
+                'auto_download': True
             }
             
     except Exception as e:
@@ -131,14 +174,6 @@ def download_youtube_video(url, download_id):
             'status': 'error',
             'message': f'Error: {str(e)}'
         }
-
-@app.route('/get_file/<download_id>')
-def get_file(download_id):
-    if download_id in downloads_files:
-        filename = downloads_files[download_id]['filename']
-        if os.path.exists(filename):
-            return send_file(filename, as_attachment=True)
-    return "File not found", 404
 
 if __name__ == '__main__':
     # Only run in debug mode when running directly

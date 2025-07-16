@@ -68,11 +68,6 @@ def download():
     
     return jsonify({'download_id': download_id, 'status': 'started'})
 
-@app.route('/progress/<download_id>')
-def get_progress(download_id):
-    """Get download progress for a specific download ID"""
-    progress = downloads_progress.get(download_id, {'status': 'not_found'})
-    return jsonify(progress)
 
 @app.route('/stream/<download_id>')
 def stream_file(download_id):

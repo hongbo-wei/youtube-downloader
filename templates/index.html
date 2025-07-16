@@ -10,10 +10,7 @@
     <div class="container">
         <h1>📹 YouTube Downloader</h1>
         
-        <!-- Diagnostic info -->
-        <div id="diagnostic-info" class="diagnostic-info">
-            <strong>🔍 Server Status:</strong> <span id="server-status">Checking...</span>
-        </div>
+
         
         <form id="downloadForm">
             <div class="input-group">
@@ -21,7 +18,6 @@
             </div>
             <div class="button-group">
                 <button type="submit" class="btn" id="downloadBtn">Start Download</button>
-                <button type="button" class="btn secondary" id="diagnosticBtn">🔍 Check Status</button>
             </div>
         </form>
         
@@ -33,14 +29,9 @@
             </a>
         </div>
         
-        <div class="progress-container" id="progressContainer">
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progressBar"></div>
-                <div class="progress-text" id="progressText">0%</div>
-            </div>
-        </div>
+
         
-        <div class="error" id="errorMessage"></div>
+
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

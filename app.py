@@ -114,6 +114,7 @@ def download_youtube_video(url, download_id):
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'progress_hooks': [progress_hook],
+            'cookies': os.path.join('static', 'cookies.txt'),
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

@@ -150,111 +150,41 @@ def download_youtube_video(url, download_id):
         # Create progress hook
         progress_hook = ProgressHook(download_id)
         
-        # 尝试多种配置以绕过云端限制
-        config_attempts = [
-            {
-                # 配置1: 最新浏览器模拟 + OAuth策略
-                'format': 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
-                'merge_output_format': 'mp4',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'noplaylist': True,
-                'progress_hooks': [progress_hook],
-                'rm_cachedir': True,
-                'no_cache_dir': True,
-                'overwrites': True,
-                'age_limit': None,
-                'geo_bypass': True,
-                'geo_bypass_country': 'US',
-                'socket_timeout': 30,
-                'retries': 3,
-                'fragment_retries': 3,
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br, zstd',
-                    'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                    'Sec-Ch-Ua-Mobile': '?0',
-                    'Sec-Ch-Ua-Platform': '"Windows"',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Sec-Fetch-User': '?1',
-                    'Cache-Control': 'max-age=0',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'skip': ['hls', 'dash'],
-                        'player_skip': ['js'],
-                        'player_client': ['android', 'web'],
-                    }
-                },
-            },
-            {
-                # 配置2: Android客户端模拟
-                'format': 'best[height<=480][ext=mp4]/worst[ext=mp4]/worst',
-                'merge_output_format': 'mp4',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'noplaylist': True,
-                'progress_hooks': [progress_hook],
-                'rm_cachedir': True,
-                'no_cache_dir': True,
-                'overwrites': True,
-                'geo_bypass': True,
-                'socket_timeout': 20,
-                'http_headers': {
-                    'User-Agent': 'com.google.android.youtube/19.29.37 (Linux; U; Android 11; SM-G973F Build/RP1A.200720.012) gzip',
-                    'X-YouTube-Client-Name': '3',
-                    'X-YouTube-Client-Version': '19.29.37',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android'],
-                        'skip': ['webpage'],
-                    }
-                },
-            },
-            {
-                # 配置3: iOS客户端模拟
-                'format': 'worst[ext=mp4]/worst',
-                'merge_output_format': 'mp4',
-                'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-                'noplaylist': True,
-                'progress_hooks': [progress_hook],
-                'rm_cachedir': True,
-                'no_cache_dir': True,
-                'overwrites': True,
-                'geo_bypass': True,
-                'http_headers': {
-                    'User-Agent': 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)',
-                    'X-YouTube-Client-Name': '5',
-                    'X-YouTube-Client-Version': '19.29.1',
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['ios'],
-                        'skip': ['webpage'],
-                    }
-                },
-            }
+        # Try different format options in order of preference
+        format_options = [
+            'best[ext=mp4]/best',  # First try best quality
+            'best[height<=720][ext=mp4]/best[height<=720]',  # Then try 720p max
+            'best[height<=480][ext=mp4]/best[height<=480]',  # Then try 480p max
+            'worst[ext=mp4]/worst'  # Finally try worst quality
         ]
         
         last_error = None
-        for i, ydl_opts in enumerate(config_attempts):
+        for i, format_selector in enumerate(format_options):
             try:
+                # Update status with current attempt
                 downloads_progress[download_id] = {
                     'status': 'starting',
-                    'message': f'Trying method {i+1}/3: {"Browser" if i==0 else "Android" if i==1 else "iOS"} mode...'
+                    'message': f'Trying quality option {i+1}/{len(format_options)}...'
+                }
+                
+                # Simple, reliable configuration with better error handling
+                ydl_opts = {
+                    'format': format_selector,
+                    'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                    'noplaylist': True,
+                    'progress_hooks': [progress_hook],
+                    'no_cache_dir': True,
+                    'extract_flat': False,
+                    'retries': 5,
+                    'fragment_retries': 5,
+                    'socket_timeout': 30,
+                    'http_chunk_size': 10485760,  # 10MB chunks
                 }
                 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     # Extract video info first to get the title
                     info = ydl.extract_info(url, download=False)
                     video_title = info.get('title', 'Unknown Video')
-                    
-                    # Check if video is available
-                    if not info.get('formats') and not info.get('url'):
-                        raise Exception("Video has no available formats")
                     
                     # Update progress hook with video title
                     progress_hook.video_title = video_title
@@ -288,38 +218,52 @@ def download_youtube_video(url, download_id):
                         'download_url': f'/stream/{download_id}',
                         'auto_download': True
                     }
-                    print(f"✅ Success with method {i+1}: {video_title}")
-                    return  # 成功，退出函数
+                    print(f"✅ Download completed: {video_title}")
+                    return  # Success, exit function
                     
             except Exception as e:
-                error_msg = str(e)
-                print(f"❌ Method {i+1} failed: {error_msg}")
-                
-                # 检查是否是特定的YouTube错误
-                if any(keyword in error_msg.lower() for keyword in [
-                    'video unavailable', 'private video', 'removed', 'deleted',
-                    'sign in to confirm', 'not available', 'blocked'
-                ]):
-                    last_error = f"YouTube Error: {error_msg}"
-                    if i == len(config_attempts) - 1:  # 最后一次尝试
-                        break
-                else:
-                    last_error = error_msg
-                
+                last_error = str(e)
+                print(f"❌ Format option {i+1} failed: {last_error}")
                 continue
         
-        # 所有配置都失败了
+        # All format options failed
+        error_msg = last_error or "All download attempts failed"
+        
+        # Provide more specific error messages
+        if "bytes read" in error_msg and "more expected" in error_msg:
+            error_msg = "Download interrupted - network connection lost. Please try again."
+        elif "Video unavailable" in error_msg:
+            error_msg = "Video is unavailable or private"
+        elif "Sign in to confirm" in error_msg:
+            error_msg = "Video requires sign-in to confirm age"
+        elif "blocked" in error_msg.lower():
+            error_msg = "Video is blocked in your region"
+        
         downloads_progress[download_id] = {
             'status': 'error',
-            'message': f'❌ All download methods failed. YouTube may be blocking this server IP. Error: {last_error}. 💡 For reliable downloads, clone and run locally: https://github.com/hongbo-wei/youtube-downloader'
+            'message': f'Error: {error_msg}'
         }
+        print(f"Download {download_id}: Error - {error_msg}")
             
     except Exception as e:
+        error_msg = str(e)
+        print(f"❌ Download failed: {error_msg}")
+        
+        # Provide more specific error messages
+        if "bytes read" in error_msg and "more expected" in error_msg:
+            error_msg = "Download interrupted - network connection lost. Please try again."
+        elif "Video unavailable" in error_msg:
+            error_msg = "Video is unavailable or private"
+        elif "Sign in to confirm" in error_msg:
+            error_msg = "Video requires sign-in to confirm age"
+        elif "blocked" in error_msg.lower():
+            error_msg = "Video is blocked in your region"
+        
         downloads_progress[download_id] = {
             'status': 'error',
-            'message': f'Error: {str(e)}'
+            'message': f'Error: {error_msg}'
         }
-        print(f"Download {download_id}: Error - {str(e)}")
+        print(f"Download {download_id}: Error - {error_msg}")
 
 @app.route('/health')
 def health_check():
